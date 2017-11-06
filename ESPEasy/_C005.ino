@@ -8,144 +8,115 @@
 
 boolean CPlugin_005(byte function, struct EventStruct *event, String& string)
 {
-   boolean success = false;
+  boolean success = false;
 
-   switch (function)
-   {
-   case CPLUGIN_PROTOCOL_ADD:
-   {
-      Protocol[++protocolCount].Number = CPLUGIN_ID_005;
-      Protocol[protocolCount].usesMQTT = true;
-      Protocol[protocolCount].usesTemplate = true;
-      Protocol[protocolCount].usesAccount = true;
-      Protocol[protocolCount].usesPassword = true;
-      Protocol[protocolCount].defaultPort = 1883;
-      Protocol[protocolCount].usesID = false;
-      break;
-   }
-
-   case CPLUGIN_GET_DEVICENAME:
-   {
-      string = F(CPLUGIN_NAME_005);
-      break;
-   }
-
-   case CPLUGIN_PROTOCOL_TEMPLATE:
-   {
-      event->String1 = F("/%sysname%/#");
-      event->String2 = F("/%sysname%/%tskname%");
-      break;
-   }
-
-   case CPLUGIN_PROTOCOL_RECV:
-   {
-      // Split topic into array
-      String tmpTopic = event->String1.substring(1);
-      String topicSplit[10];
-      int SlashIndex = tmpTopic.indexOf('/');
-      byte count = 0;
-      while (SlashIndex > 0 && count < 10 - 1)
+  switch (function)
+  {
+    case CPLUGIN_PROTOCOL_ADD:
       {
-         topicSplit[count] = tmpTopic.substring(0, SlashIndex);
-         tmpTopic = tmpTopic.substring(SlashIndex + 1);
-         SlashIndex = tmpTopic.indexOf('/');
-         count++;
-      }
-      topicSplit[count] = tmpTopic;
-
-      String cmd = "";
-      struct EventStruct TempEvent;
-
-      if (topicSplit[count] == F("cmd"))
-      {
-         cmd = event->String2;
-         parseCommandString(&TempEvent, cmd);
-         TempEvent.Source = VALUE_SOURCE_MQTT;
-      }
-      else
-      {
-         cmd = topicSplit[count - 1];
-         TempEvent.Par1 = topicSplit[count].toInt();
-         TempEvent.Par2 = event->String2.toFloat();
-         TempEvent.Par3 = 0;
-      }
-      // in case of event, store to buffer and return...
-      String command = parseString(cmd, 1);
-      if (command == F("event"))
-         eventBuffer = cmd.substring(6);
-      else if
-         (PluginCall(PLUGIN_WRITE, &TempEvent, cmd));
-      else
-         remoteConfig(&TempEvent, cmd);
-
-      break;
-   }
-
-   case CPLUGIN_PROTOCOL_SEND:
-   {
-      ControllerSettingsStruct ControllerSettings;
-      LoadControllerSettings(event->ControllerIndex, (byte*)&ControllerSettings, sizeof(ControllerSettings));
-
-      statusLED(true);
-
-      if (ExtraTaskSettings.TaskDeviceValueNames[0][0] == 0)
-         PluginCall(PLUGIN_GET_DEVICEVALUENAMES, event, dummyString);
-
-      String pubname = ControllerSettings.Publish;
-      pubname.replace(F("%sysname%"), Settings.Name);
-      pubname.replace(F("%tskname%"), ExtraTaskSettings.TaskDeviceName);
-      pubname.replace(F("%id%"), String(event->idx));
-
-      //Serial.print("pubname: ");
-      //Serial.println(pubname);
-
-      byte DeviceIndex = getDeviceIndex(Settings.TaskDeviceNumber[event->TaskIndex]);
-      byte valueCount = getValueCountFromSensorType(event->sensorType);
-
-      //Serial.print("Device Index: ");
-      //Serial.println(DeviceIndex);
-      //Serial.print("ValueCount: ");
-      //Serial.println(valueCount);
-
-      String payload = "{";
-
-      for (byte x = 0; x < valueCount; x++)
-      {
-         //Serial.print("LOOP value idx: ");
-         //Serial.println(x);
-
-         payload += "\"";
-         payload += ExtraTaskSettings.TaskDeviceValueNames[x];
-         payload += "\":";
-
-         if (event->sensorType == SENSOR_TYPE_LONG)
-            payload += (unsigned long)UserVar[event->BaseVarIndex] + ((unsigned long)UserVar[event->BaseVarIndex + 1] << 16);
-         else
-            payload += toString(UserVar[event->BaseVarIndex + x], ExtraTaskSettings.TaskDeviceValueDecimals[x]);
-
-         if (x < (valueCount - 1))
-            payload += ",";
-
-         //Serial.print("LOOP payload: ");
-         //Serial.println(payload);
+        Protocol[++protocolCount].Number = CPLUGIN_ID_005;
+        Protocol[protocolCount].usesMQTT = true;
+        Protocol[protocolCount].usesTemplate = true;
+        Protocol[protocolCount].usesAccount = true;
+        Protocol[protocolCount].usesPassword = true;
+        Protocol[protocolCount].defaultPort = 1883;
+        Protocol[protocolCount].usesID = false;
+        break;
       }
 
-      payload += "}";
+    case CPLUGIN_GET_DEVICENAME:
+      {
+        string = F(CPLUGIN_NAME_005);
+        break;
+      }
 
-      //Serial.print("FULL PAYLOAD: ");
-      //Serial.println(payload);
+    case CPLUGIN_PROTOCOL_TEMPLATE:
+      {
+        event->String1 = F("/%sysname%/#");
+        event->String2 = F("/%sysname%/%tskname%/%valname%");
+        break;
+      }
 
-      MQTTclient.publish(pubname.c_str(), payload.c_str(), Settings.MQTTRetainFlag);
+    case CPLUGIN_PROTOCOL_RECV:
+      {
+        // Split topic into array
+        String tmpTopic = event->String1.substring(1);
+        String topicSplit[10];
+        int SlashIndex = tmpTopic.indexOf('/');
+        byte count = 0;
+        while (SlashIndex > 0 && count < 10 - 1)
+        {
+          topicSplit[count] = tmpTopic.substring(0, SlashIndex);
+          tmpTopic = tmpTopic.substring(SlashIndex + 1);
+          SlashIndex = tmpTopic.indexOf('/');
+          count++;
+        }
+        topicSplit[count] = tmpTopic;
 
-      //Serial.println("MSG SENT");
+        String cmd = "";
+        struct EventStruct TempEvent;
 
-      String log = F("MQTT : ");
-      log += pubname;
-      log += " ";
-      log += payload;
-      addLog(LOG_LEVEL_DEBUG, log);
-      break;
-   }
-   return success;
-   }
+        if (topicSplit[count] == F("cmd"))
+        {
+          cmd = event->String2;
+          parseCommandString(&TempEvent, cmd);
+          TempEvent.Source = VALUE_SOURCE_MQTT;
+        }
+        else
+        {
+          cmd = topicSplit[count - 1];
+          TempEvent.Par1 = topicSplit[count].toInt();
+          TempEvent.Par2 = event->String2.toFloat();
+          TempEvent.Par3 = 0;
+        }
+        // in case of event, store to buffer and return...
+        String command = parseString(cmd, 1);
+        if (command == F("event"))
+          eventBuffer = cmd.substring(6);
+        else if
+          (PluginCall(PLUGIN_WRITE, &TempEvent, cmd));
+        else
+          remoteConfig(&TempEvent, cmd);
+
+        break;
+      }
+
+    case CPLUGIN_PROTOCOL_SEND:
+      {
+        ControllerSettingsStruct ControllerSettings;
+        LoadControllerSettings(event->ControllerIndex, (byte*)&ControllerSettings, sizeof(ControllerSettings));
+
+        statusLED(true);
+
+        if (ExtraTaskSettings.TaskDeviceValueNames[0][0] == 0)
+          PluginCall(PLUGIN_GET_DEVICEVALUENAMES, event, dummyString);
+
+        String pubname = ControllerSettings.Publish;
+        pubname.replace(F("%sysname%"), Settings.Name);
+        pubname.replace(F("%tskname%"), ExtraTaskSettings.TaskDeviceName);
+        pubname.replace(F("%id%"), String(event->idx));
+
+        String value = "";
+        // byte DeviceIndex = getDeviceIndex(Settings.TaskDeviceNumber[event->TaskIndex]);
+        byte valueCount = getValueCountFromSensorType(event->sensorType);
+        for (byte x = 0; x < valueCount; x++)
+        {
+          String tmppubname = pubname;
+          tmppubname.replace(F("%valname%"), ExtraTaskSettings.TaskDeviceValueNames[x]);
+          if (event->sensorType == SENSOR_TYPE_LONG)
+            value = (unsigned long)UserVar[event->BaseVarIndex] + ((unsigned long)UserVar[event->BaseVarIndex + 1] << 16);
+          else
+            value = formatUserVar(event, x);
+          MQTTclient.publish(tmppubname.c_str(), value.c_str(), Settings.MQTTRetainFlag);
+          String log = F("MQTT : ");
+          log += tmppubname;
+          log += " ";
+          log += value;
+          addLog(LOG_LEVEL_DEBUG, log);
+        }
+        break;
+      }
+  }
+
+  return success;
 }

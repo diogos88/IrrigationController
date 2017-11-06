@@ -107,7 +107,7 @@ boolean CPlugin_011(byte function, struct EventStruct *event, String& string)
 
     case CPLUGIN_PROTOCOL_SEND:
       {
-         HTTPSend011(event);
+      	HTTPSend011(event);
       }
 
   }
@@ -143,7 +143,7 @@ boolean HTTPSend011(struct EventStruct *event)
   IPAddress host(ControllerSettings.IP[0], ControllerSettings.IP[1], ControllerSettings.IP[2], ControllerSettings.IP[3]);
 
   addLog(LOG_LEVEL_DEBUG, String(F("HTTP : connecting to "))+
-      (ControllerSettings.UseDNS ? ControllerSettings.HostName : host.toString() ) +":"+ControllerSettings.Port);
+  		(ControllerSettings.UseDNS ? ControllerSettings.HostName : host.toString() ) +":"+ControllerSettings.Port);
 
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
@@ -216,15 +216,17 @@ boolean HTTPSend011(struct EventStruct *event)
 
   client.flush();
   client.stop();
+
+  return(success);
 }
 
 // parses the string and returns only the the number of name/values we want
 // according to the parameter numberOfValuesWanted
 void DeleteNotNeededValues(String &s, byte numberOfValuesWanted)
 {
-   numberOfValuesWanted++;
-   for (byte i=1; i < 5; i++)
-   {
+	numberOfValuesWanted++;
+	for (byte i=1; i < 5; i++)
+	{
     String startToken=String(F("%")) + i + F("%");
     String endToken=String(F("%/")) + i + F("%");
 
@@ -241,17 +243,17 @@ void DeleteNotNeededValues(String &s, byte numberOfValuesWanted)
       int startIndex=s.indexOf(startToken);
       int endIndex=s.indexOf(endToken);
       while(startIndex != -1 && endIndex != -1  && endIndex>startIndex)
-      {
+  		{
         String p = s.substring(startIndex,endIndex+4);
         //remove the whole string including tokens
-            s.replace(p, F(""));
+				s.replace(p, F(""));
 
         //find next ones
         startIndex=s.indexOf(startToken);
         endIndex=s.indexOf(endToken);
-      }
+  		}
     }
-   }
+	}
 }
 
 
@@ -270,50 +272,50 @@ void ReplaceTokenByValue(String& s, struct EventStruct *event)
 // example string:
 // write?db=testdb&type=%1%%vname1%%/1%%2%;%vname2%%/2%%3%;%vname3%%/3%%4%;%vname4%%/4%&value=%1%%val1%%/1%%2%;%val2%%/2%%3%;%val3%%/3%%4%;%val4%%/4%
 //	%1%%vname1%,Standort=%tskname% Wert=%val1%%/1%%2%%LF%%vname2%,Standort=%tskname% Wert=%val2%%/2%%3%%LF%%vname3%,Standort=%tskname% Wert=%val3%%/3%%4%%LF%%vname4%,Standort=%tskname% Wert=%val4%%/4%
-   addLog(LOG_LEVEL_DEBUG_MORE, F("HTTP before parsing: "));
-   addLog(LOG_LEVEL_DEBUG_MORE, s);
+	addLog(LOG_LEVEL_DEBUG_MORE, F("HTTP before parsing: "));
+	addLog(LOG_LEVEL_DEBUG_MORE, s);
 
-   switch (event->sensorType)
-   {
-      case SENSOR_TYPE_SINGLE:
-      case SENSOR_TYPE_SWITCH:
-      case SENSOR_TYPE_DIMMER:
-      case SENSOR_TYPE_WIND:
-      case SENSOR_TYPE_LONG:
-      {
-         DeleteNotNeededValues(s,1);
-         break;
-      }
-      case SENSOR_TYPE_DUAL:
-      case SENSOR_TYPE_TEMP_HUM:
-      case SENSOR_TYPE_TEMP_BARO:
-      {
-         DeleteNotNeededValues(s,2);
-         break;
-      }
-      case SENSOR_TYPE_TRIPLE:
-      case SENSOR_TYPE_TEMP_HUM_BARO:
-      {
-         DeleteNotNeededValues(s,3);
-         break;
-      }
-      case SENSOR_TYPE_QUAD:
-      {
-         DeleteNotNeededValues(s,4);
-         break;
-      }
-   }
+	switch (event->sensorType)
+	{
+		case SENSOR_TYPE_SINGLE:
+		case SENSOR_TYPE_SWITCH:
+		case SENSOR_TYPE_DIMMER:
+		case SENSOR_TYPE_WIND:
+		case SENSOR_TYPE_LONG:
+		{
+			DeleteNotNeededValues(s,1);
+			break;
+		}
+		case SENSOR_TYPE_DUAL:
+		case SENSOR_TYPE_TEMP_HUM:
+		case SENSOR_TYPE_TEMP_BARO:
+		{
+			DeleteNotNeededValues(s,2);
+			break;
+		}
+		case SENSOR_TYPE_TRIPLE:
+		case SENSOR_TYPE_TEMP_HUM_BARO:
+		{
+			DeleteNotNeededValues(s,3);
+			break;
+		}
+		case SENSOR_TYPE_QUAD:
+		{
+			DeleteNotNeededValues(s,4);
+			break;
+		}
+	}
 
-   addLog(LOG_LEVEL_DEBUG_MORE, F("HTTP after parsing: "));
-   addLog(LOG_LEVEL_DEBUG_MORE, s);
+	addLog(LOG_LEVEL_DEBUG_MORE, F("HTTP after parsing: "));
+	addLog(LOG_LEVEL_DEBUG_MORE, s);
 
   //NOTE: cant we just call parseTemplate() for all the standard stuff??
 
   s.replace(F("%systime%"), getTimeString(':'));
 
-   #if FEATURE_ADC_VCC
-      s.replace(F("%vcc%"), String(vcc));
-   #endif
+	#if FEATURE_ADC_VCC
+		s.replace(F("%vcc%"), String(vcc));
+	#endif
 
   // IPAddress ip = WiFi.localIP();
   // char strIP[20];
@@ -336,13 +338,13 @@ void ReplaceTokenByValue(String& s, struct EventStruct *event)
   if (event->sensorType == SENSOR_TYPE_LONG)
     s.replace(F("%val1%"), String((unsigned long)UserVar[event->BaseVarIndex] + ((unsigned long)UserVar[event->BaseVarIndex + 1] << 16)));
   else {
-    s.replace(F("%val1%"), toString(UserVar[event->BaseVarIndex + 0], ExtraTaskSettings.TaskDeviceValueDecimals[0]));
-    s.replace(F("%val2%"), toString(UserVar[event->BaseVarIndex + 1], ExtraTaskSettings.TaskDeviceValueDecimals[1]));
-    s.replace(F("%val3%"), toString(UserVar[event->BaseVarIndex + 2], ExtraTaskSettings.TaskDeviceValueDecimals[2]));
-    s.replace(F("%val4%"), toString(UserVar[event->BaseVarIndex + 3], ExtraTaskSettings.TaskDeviceValueDecimals[3]));
+    s.replace(F("%val1%"), formatUserVar(event, 0));
+    s.replace(F("%val2%"), formatUserVar(event, 1));
+    s.replace(F("%val3%"), formatUserVar(event, 2));
+    s.replace(F("%val4%"), formatUserVar(event, 3));
   }
-   addLog(LOG_LEVEL_DEBUG_MORE, F("HTTP after replacements: "));
-   addLog(LOG_LEVEL_DEBUG_MORE, s);
+	addLog(LOG_LEVEL_DEBUG_MORE, F("HTTP after replacements: "));
+	addLog(LOG_LEVEL_DEBUG_MORE, s);
 }
 
 #endif

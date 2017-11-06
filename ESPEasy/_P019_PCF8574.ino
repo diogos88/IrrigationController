@@ -223,4 +223,5 @@ boolean Plugin_019_Write(byte Par1, byte Par2)
     Wire.endTransmission();
     success = true;
   }
+  return(success);
 }

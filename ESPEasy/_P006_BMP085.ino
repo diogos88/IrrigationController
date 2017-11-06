@@ -137,6 +137,8 @@ boolean Plugin_006_bmp085_begin()
   mb = Plugin_006_bmp085_read16(BMP085_CAL_MB);
   mc = Plugin_006_bmp085_read16(BMP085_CAL_MC);
   md = Plugin_006_bmp085_read16(BMP085_CAL_MD);
+
+  return(true);
 }
 
 /*********************************************************************/

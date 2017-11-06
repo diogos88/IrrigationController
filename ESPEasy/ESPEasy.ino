@@ -1,3 +1,9 @@
+#ifdef CONTINUOUS_INTEGRATION
+#pragma GCC diagnostic error "-Wall"
+#else
+#pragma GCC diagnostic warning "-Wall"
+#endif
+
 /****************************************************************************************************************************\
  * Arduino project "ESP Easy" © Copyright www.letscontrolit.com
  *
@@ -73,11 +79,11 @@
 // You can always change these during runtime and save to eeprom
 // After loading firmware, issue a 'reset' command to load the defaults.
 
-#define DEFAULT_NAME        "newdevice"         // Enter your device friendly name
-#define DEFAULT_SSID        "No Internet Access"              // Enter your network SSID
-#define DEFAULT_KEY         "^-/<8++<0L/g>cB"            // Enter your network WPA key
+#define DEFAULT_NAME        "ESP_Easy"         // Enter your device friendly name
+#define DEFAULT_SSID        "ssid"              // Enter your network SSID
+#define DEFAULT_KEY         "wpakey"            // Enter your network WPA key
 #define DEFAULT_DELAY       60                  // Enter your Send delay in seconds
-#define DEFAULT_AP_KEY      "9LWszywJVL"         // Enter network WPA key for AP (config) mode
+#define DEFAULT_AP_KEY      "configesp"         // Enter network WPA key for AP (config) mode
 
 #define DEFAULT_USE_STATIC_IP   false           // true or false enabled or disabled set static IP
 #define DEFAULT_IP          "192.168.0.50"      // Enter your IP address
@@ -111,10 +117,18 @@
 #define FEATURE_ADC_VCC                  false
 
 
-//enable Arduino OTA updating.
-//Note: This adds around 10kb to the firmware size, and 1kb extra ram.
-//#define FEATURE_ARDUINO_OTA
+#if defined(ESP8266)
+  //enable Arduino OTA updating.
+  //Note: This adds around 10kb to the firmware size, and 1kb extra ram.
+  // #define FEATURE_ARDUINO_OTA
 
+  //enable mDNS mode (adds about 6kb ram and some bytes IRAM)
+  // #define FEATURE_MDNS
+#endif
+#if defined(ESP32)
+ #define FEATURE_ARDUINO_OTA
+ //#define FEATURE_MDNS
+#endif
 
 //enable reporting status to ESPEasy developers.
 //this informs us of crashes and stability issues.
@@ -127,7 +141,7 @@
 //If you dont select any, a version with a minimal number of plugins will be biult for 512k versions.
 //(512k is NOT finsihed or tested yet as of v2.0.0-dev6)
 
-//build all the normal stable plugins
+//build all the normal stable plugins (on by default)
 #define PLUGIN_BUILD_NORMAL
 
 //build all plugins that are in test stadium
@@ -139,10 +153,15 @@
 // ********************************************************************************
 //   DO NOT CHANGE ANYTHING BELOW THIS LINE
 // ********************************************************************************
-#define ESP_PROJECT_PID           2016110800L
+#define ESP_PROJECT_PID           2016110801L
 #define VERSION                             2
 #define BUILD                           20000 // git version 2.0.0
-#define BUILD_NOTES                 " - Mega"
+#if defined(ESP8266)
+  #define BUILD_NOTES                 " - Mega"
+#endif
+#if defined(ESP32)
+  #define BUILD_NOTES                 " - Mega32"
+#endif
 
 #ifndef BUILD_GIT
 #define BUILD_GIT "(custom)"
@@ -155,7 +174,6 @@
 #define NODE_TYPE_ID_ESP_EASY32_STD        33
 #define NODE_TYPE_ID_ARDUINO_EASY_STD      65
 #define NODE_TYPE_ID_NANO_EASY_STD         81
-#define NODE_TYPE_ID                        NODE_TYPE_ID_ESP_EASYM_STD
 
 #define PLUGIN_INIT_ALL                     1
 #define PLUGIN_INIT                         2
@@ -177,7 +195,10 @@
 #define PLUGIN_CLOCK_IN                    18
 #define PLUGIN_TIMER_IN                    19
 #define PLUGIN_FIFTY_PER_SECOND            20
-#define PLUGIN_REMOTE_CONFIG               21
+#define PLUGIN_SET_CONFIG                  21
+#define PLUGIN_GET_DEVICEGPIONAMES         22
+#define PLUGIN_EXIT                        23
+#define PLUGIN_GET_CONFIG                  24
 
 #define CPLUGIN_PROTOCOL_ADD                1
 #define CPLUGIN_PROTOCOL_TEMPLATE           2
@@ -193,19 +214,22 @@
 #define NPLUGIN_WEBFORM_LOAD                4
 #define NPLUGIN_WRITE                       5
 #define NPLUGIN_NOTIFY                      6
+#define NPLUGIN_NOT_FOUND                 255
+
 
 #define LOG_LEVEL_ERROR                     1
 #define LOG_LEVEL_INFO                      2
 #define LOG_LEVEL_DEBUG                     3
 #define LOG_LEVEL_DEBUG_MORE                4
+#define LOG_LEVEL_DEBUG_DEV                 9 // use for testing/debugging only, not for regular use
 
 #define CMD_REBOOT                         89
 #define CMD_WIFI_DISCONNECT               135
 
 #if defined(PLUGIN_BUILD_TESTING) || defined(PLUGIN_BUILD_DEV)
-#define DEVICES_MAX                      72
+  #define DEVICES_MAX                      72
 #else
-#define DEVICES_MAX                      64
+  #define DEVICES_MAX                      64
 #endif
 #define TASKS_MAX                           4 // max 12!
 #define CONTROLLER_MAX                      1 // max 4!
@@ -218,7 +242,7 @@
 #define PLUGIN_EXTRACONFIGVAR_MAX          16
 #define CPLUGIN_MAX                        16
 #define NPLUGIN_MAX                         4
-#define UNIT_MAX                           24 // Only relevant for UDP unicast message 'sweeps' and the nodelist.
+#define UNIT_MAX                           32 // Only relevant for UDP unicast message 'sweeps' and the nodelist.
 #define RULES_TIMER_MAX                     8
 #define SYSTEM_TIMER_MAX                    8
 #define SYSTEM_CMD_TIMER_MAX                2
@@ -267,54 +291,93 @@
 #define BOOT_CAUSE_DEEP_SLEEP               2
 #define BOOT_CAUSE_EXT_WD                  10
 
-#define DAT_TASKS_SIZE                   2560
-#define DAT_TASKS_CUSTOM_OFFSET          DAT_TASKS_SIZE-1024
+#define DAT_TASKS_SIZE                   2048
+#define DAT_TASKS_CUSTOM_OFFSET          1024
 #define DAT_CUSTOM_CONTROLLER_SIZE       1024
 #define DAT_CONTROLLER_SIZE              1024
 #define DAT_NOTIFICATION_SIZE            1024
 
-#define DAT_OFFSET_TASKS                 4096
-#define DAT_OFFSET_CONTROLLER            DAT_OFFSET_TASKS +  DAT_TASKS_SIZE*TASKS_MAX
-#define DAT_OFFSET_CUSTOM_CONTROLLER     DAT_OFFSET_CONTROLLER + DAT_CONTROLLER_SIZE*CONTROLLER_MAX
+#define DAT_OFFSET_TASKS                 4096  // each task = 2k, (1024 basic + 1024 bytes custom), 12 max
+#define DAT_OFFSET_CONTROLLER           28672  // each controller = 1k, 4 max
+#define DAT_OFFSET_CUSTOM_CONTROLLER    32768  // each custom controller config = 1k, 4 max.
 
-#include "lwip/tcp_impl.h"
-#include <ESP8266WiFi.h>
-#include <DNSServer.h>
+
+#define FS_NO_GLOBALS
+#if defined(ESP8266)
+  #define NODE_TYPE_ID                        NODE_TYPE_ID_ESP_EASYM_STD
+  #define FILE_CONFIG       "config.dat"
+  #define FILE_SECURITY     "security.dat"
+  #define FILE_NOTIFICATION "notification.dat"
+  #define FILE_RULES        "rules1.dat"
+  #include "lwip/tcp_impl.h"
+  #include <ESP8266WiFi.h>
+  #include <ESP8266WebServer.h>
+  ESP8266WebServer WebServer(80);
+  #include <DNSServer.h>
+  #include <Servo.h>
+  #include <ESP8266HTTPUpdateServer.h>
+  ESP8266HTTPUpdateServer httpUpdater(true);
+  #ifndef LWIP_OPEN_SRC
+  #define LWIP_OPEN_SRC
+  #endif
+  #include "lwip/opt.h"
+  #include "lwip/udp.h"
+  #include "lwip/igmp.h"
+  #include "include/UdpContext.h"
+  #include "limits.h"
+  extern "C" {
+   #include "user_interface.h"
+  }
+  extern "C" {
+  #include "spi_flash.h"
+  }
+  extern "C" uint32_t _SPIFFS_start;
+  extern "C" uint32_t _SPIFFS_end;
+  extern "C" uint32_t _SPIFFS_page;
+  extern "C" uint32_t _SPIFFS_block;
+  #ifdef FEATURE_MDNS
+    #include <ESP8266mDNS.h>
+  #endif
+  #ifdef FEATURE_ARDUINO_OTA
+    #include <ArduinoOTA.h>
+    #include <ESP8266mDNS.h>
+    bool ArduinoOTAtriggered=false;
+  #endif
+  #define PIN_D_MAX        16
+#endif
+#if defined(ESP32)
+  #define NODE_TYPE_ID                        NODE_TYPE_ID_ESP_EASY32_STD
+  #define ICACHE_RAM_ATTR IRAM_ATTR
+  #define FILE_CONFIG       "/config.dat"
+  #define FILE_SECURITY     "/security.dat"
+  #define FILE_NOTIFICATION "/notification.dat"
+  #define FILE_RULES        "/rules1.dat"
+  #include <WiFi.h>
+  #include <ESP32WebServer.h>
+  #include "SPIFFS.h"
+  ESP32WebServer WebServer(80); 
+  #ifdef FEATURE_MDNS
+    #include <ESPmDNS.h>
+  #endif
+  #ifdef FEATURE_ARDUINO_OTA
+    #include <ArduinoOTA.h>
+    #include <ESPmDNS.h>
+    bool ArduinoOTAtriggered=false;
+  #endif
+  #define PIN_D_MAX        39
+  int8_t ledChannelPin[16];
+#endif
+
 #include <WiFiUdp.h>
-#include <ESP8266WebServer.h>
+#include <DNSServer.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <PubSubClient.h>
-// #include <ArduinoJson.h>
-// #include <LiquidCrystal_I2C.h>
-#include <Servo.h>
-#define FS_NO_GLOBALS
 #include <FS.h>
 #include <SD.h>
-#include <ESP8266HTTPUpdateServer.h>
-ESP8266HTTPUpdateServer httpUpdater(true);
 #include <base64.h>
 #if FEATURE_ADC_VCC
 ADC_MODE(ADC_VCC);
-#endif
-#ifndef LWIP_OPEN_SRC
-#define LWIP_OPEN_SRC
-#endif
-#include "lwip/opt.h"
-#include "lwip/udp.h"
-#include "lwip/igmp.h"
-#include "include/UdpContext.h"
-#include "limits.h"
-
-extern "C" {
-#include "user_interface.h"
-}
-
-
-#ifdef FEATURE_ARDUINO_OTA
-#include <ArduinoOTA.h>
-#include <ESP8266mDNS.h>
-bool ArduinoOTAtriggered = false;
 #endif
 
 
@@ -322,244 +385,239 @@ bool ArduinoOTAtriggered = false;
 const byte DNS_PORT = 53;
 IPAddress apIP(192, 168, 4, 1);
 DNSServer dnsServer;
-
+#ifdef FEATURE_MDNS
+MDNSResponder mdns;
+#endif
 
 // MQTT client
 WiFiClient mqtt;
 PubSubClient MQTTclient(mqtt);
 
-// WebServer
-ESP8266WebServer WebServer(80);
-
 // udp protocol stuff (syslog, global sync, node info list, ntp time)
 WiFiUDP portUDP;
 
-
-
-extern "C" {
-#include "spi_flash.h"
-}
-extern "C" uint32_t _SPIFFS_start;
-extern "C" uint32_t _SPIFFS_end;
-extern "C" uint32_t _SPIFFS_page;
-extern "C" uint32_t _SPIFFS_block;
-
 struct SecurityStruct
 {
-   char          WifiSSID[32];
-   char          WifiKey[64];
-   char          WifiSSID2[32];
-   char          WifiKey2[64];
-   char          WifiAPKey[64];
-   char          ControllerUser[CONTROLLER_MAX][26];
-   char          ControllerPassword[CONTROLLER_MAX][64];
-   char          Password[26];
-   //its safe to extend this struct, up to 512 bytes, default values in config are 0
+  char          WifiSSID[32];
+  char          WifiKey[64];
+  char          WifiSSID2[32];
+  char          WifiKey2[64];
+  char          WifiAPKey[64];
+  char          ControllerUser[CONTROLLER_MAX][26];
+  char          ControllerPassword[CONTROLLER_MAX][64];
+  char          Password[26];
+  //its safe to extend this struct, up to 4096 bytes, default values in config are 0
 } SecuritySettings;
 
 struct SettingsStruct
 {
-   unsigned long PID;
-   int           Version;
-   int16_t       Build;
-   byte          IP[4];
-   byte          Gateway[4];
-   byte          Subnet[4];
-   byte          DNS[4];
-   byte          IP_Octet;
-   byte          Unit;
-   char          Name[26];
-   char          NTPHost[64];
-   unsigned long Delay;
-   int8_t        Pin_i2c_sda;
-   int8_t        Pin_i2c_scl;
-   int8_t        Pin_status_led;
-   int8_t        Pin_sd_cs;
-   int8_t        PinBootStates[17];
-   byte          Syslog_IP[4];
-   unsigned int  UDPPort;
-   byte          SyslogLevel;
-   byte          SerialLogLevel;
-   byte          WebLogLevel;
-   byte          SDLogLevel;
-   unsigned long BaudRate;
-   unsigned long MessageDelay;
-   byte          deepSleep;
-   boolean       CustomCSS;
-   boolean       DST;
-   byte          WDI2CAddress;
-   boolean       UseRules;
-   boolean       UseSerial;
-   boolean       UseSSDP;
-   boolean       UseNTP;
-   unsigned long WireClockStretchLimit;
-   boolean       GlobalSync;
-   unsigned long ConnectionFailuresThreshold;
-   int16_t       TimeZone;
-   boolean       MQTTRetainFlag;
-   boolean       InitSPI;
-   byte          Protocol[CONTROLLER_MAX];
-   byte          Notification[NOTIFICATION_MAX];
-   byte          TaskDeviceNumber[TASKS_MAX];
-   unsigned int  OLD_TaskDeviceID[TASKS_MAX];
-   union {
-      struct {
-         int8_t        TaskDevicePin1[TASKS_MAX];
-         int8_t        TaskDevicePin2[TASKS_MAX];
-         int8_t        TaskDevicePin3[TASKS_MAX];
-         byte          TaskDevicePort[TASKS_MAX];
-      };
-      int8_t        TaskDevicePin[4][TASKS_MAX];
-   };
-   boolean       TaskDevicePin1PullUp[TASKS_MAX];
-   int16_t       TaskDevicePluginConfig[TASKS_MAX][PLUGIN_CONFIGVAR_MAX];
-   boolean       TaskDevicePin1Inversed[TASKS_MAX];
-   float         TaskDevicePluginConfigFloat[TASKS_MAX][PLUGIN_CONFIGFLOATVAR_MAX];
-   long          TaskDevicePluginConfigLong[TASKS_MAX][PLUGIN_CONFIGLONGVAR_MAX];
-   boolean       OLD_TaskDeviceSendData[TASKS_MAX];
-   boolean       TaskDeviceGlobalSync[TASKS_MAX];
-   byte          TaskDeviceDataFeed[TASKS_MAX];
-   unsigned long TaskDeviceTimer[TASKS_MAX];
-   boolean       TaskDeviceEnabled[TASKS_MAX];
-   boolean       ControllerEnabled[CONTROLLER_MAX];
-   boolean       NotificationEnabled[NOTIFICATION_MAX];
-   unsigned int  TaskDeviceID[CONTROLLER_MAX][TASKS_MAX];
-   boolean       TaskDeviceSendData[CONTROLLER_MAX][TASKS_MAX];
-   boolean       Pin_status_led_Inversed;
-   boolean       deepSleepOnFail;
-   //its safe to extend this struct, up to 65535 bytes, default values in config are 0
+  unsigned long PID;
+  int           Version;
+  int16_t       Build;
+  byte          IP[4];
+  byte          Gateway[4];
+  byte          Subnet[4];
+  byte          DNS[4];
+  byte          IP_Octet;
+  byte          Unit;
+  char          Name[26];
+  char          NTPHost[64];
+  unsigned long Delay;
+  int8_t        Pin_i2c_sda;
+  int8_t        Pin_i2c_scl;
+  int8_t        Pin_status_led;
+  int8_t        Pin_sd_cs;
+  int8_t        PinBootStates[17];
+  byte          Syslog_IP[4];
+  unsigned int  UDPPort;
+  byte          SyslogLevel;
+  byte          SerialLogLevel;
+  byte          WebLogLevel;
+  byte          SDLogLevel;
+  unsigned long BaudRate;
+  unsigned long MessageDelay;
+  byte          deepSleep;
+  boolean       CustomCSS;
+  boolean       DST;
+  byte          WDI2CAddress;
+  boolean       UseRules;
+  boolean       UseSerial;
+  boolean       UseSSDP;
+  boolean       UseNTP;
+  unsigned long WireClockStretchLimit;
+  boolean       GlobalSync;
+  unsigned long ConnectionFailuresThreshold;
+  int16_t       TimeZone;
+  boolean       MQTTRetainFlag;
+  boolean       InitSPI;
+  byte          Protocol[CONTROLLER_MAX];
+  byte          Notification[NOTIFICATION_MAX]; //notifications, point to a NPLUGIN id
+  byte          TaskDeviceNumber[TASKS_MAX];
+  unsigned int  OLD_TaskDeviceID[TASKS_MAX];
+  union {
+    struct {
+      int8_t        TaskDevicePin1[TASKS_MAX];
+      int8_t        TaskDevicePin2[TASKS_MAX];
+      int8_t        TaskDevicePin3[TASKS_MAX];
+      byte          TaskDevicePort[TASKS_MAX];
+    };
+    int8_t        TaskDevicePin[4][TASKS_MAX];
+  };
+  boolean       TaskDevicePin1PullUp[TASKS_MAX];
+  int16_t       TaskDevicePluginConfig[TASKS_MAX][PLUGIN_CONFIGVAR_MAX];
+  boolean       TaskDevicePin1Inversed[TASKS_MAX];
+  float         TaskDevicePluginConfigFloat[TASKS_MAX][PLUGIN_CONFIGFLOATVAR_MAX];
+  long          TaskDevicePluginConfigLong[TASKS_MAX][PLUGIN_CONFIGLONGVAR_MAX];
+  boolean       OLD_TaskDeviceSendData[TASKS_MAX];
+  boolean       TaskDeviceGlobalSync[TASKS_MAX];
+  byte          TaskDeviceDataFeed[TASKS_MAX];
+  unsigned long TaskDeviceTimer[TASKS_MAX];
+  boolean       TaskDeviceEnabled[TASKS_MAX];
+  boolean       ControllerEnabled[CONTROLLER_MAX];
+  boolean       NotificationEnabled[NOTIFICATION_MAX];
+  unsigned int  TaskDeviceID[CONTROLLER_MAX][TASKS_MAX];
+  boolean       TaskDeviceSendData[CONTROLLER_MAX][TASKS_MAX];
+  boolean       Pin_status_led_Inversed;
+  boolean       deepSleepOnFail;
+  boolean       UseValueLogger;
+  boolean       ArduinoOTAEnable;
+  //its safe to extend this struct, up to several bytes, default values in config are 0
+  //look in misc.ino how config.dat is used because also other stuff is stored in it at different offsets.
+  //TODO: document config.dat somewhere here
 } Settings;
 
 struct ControllerSettingsStruct
 {
-   boolean       UseDNS;
-   byte          IP[4];
-   unsigned int  Port;
-   char          HostName[65];
-   char          Publish[129];
-   char          Subscribe[129];
+  boolean       UseDNS;
+  byte          IP[4];
+  unsigned int  Port;
+  char          HostName[65];
+  char          Publish[129];
+  char          Subscribe[129];
 };
 
 struct NotificationSettingsStruct
 {
-   char          Server[65];
-   unsigned int  Port;
-   char          Domain[65];
-   char          Sender[65];
-   char          Receiver[65];
-   char          Subject[129];
-   char          Body[513];
-   byte          Pin1;
-   byte          Pin2;
-   //its safe to extend this struct, up to 4096 bytes, default values in config are 0
+  char          Server[65];
+  unsigned int  Port;
+  char          Domain[65];
+  char          Sender[65];
+  char          Receiver[65];
+  char          Subject[129];
+  char          Body[513];
+  byte          Pin1;
+  byte          Pin2;
+  //its safe to extend this struct, up to 4096 bytes, default values in config are 0
 };
 
 struct ExtraTaskSettingsStruct
 {
-   byte    TaskIndex;
-   char    TaskDeviceName[41];
-   char    TaskDeviceFormula[VARS_PER_TASK][41];
-   char    TaskDeviceValueNames[VARS_PER_TASK][41];
-   long    TaskDevicePluginConfigLong[PLUGIN_EXTRACONFIGVAR_MAX];
-   byte    TaskDeviceValueDecimals[VARS_PER_TASK];
-   int16_t TaskDevicePluginConfig[PLUGIN_EXTRACONFIGVAR_MAX];
+  byte    TaskIndex;
+  char    TaskDeviceName[41];
+  char    TaskDeviceFormula[VARS_PER_TASK][41];
+  char    TaskDeviceValueNames[VARS_PER_TASK][41];
+  long    TaskDevicePluginConfigLong[PLUGIN_EXTRACONFIGVAR_MAX];
+  byte    TaskDeviceValueDecimals[VARS_PER_TASK];
+  int16_t TaskDevicePluginConfig[PLUGIN_EXTRACONFIGVAR_MAX];
 } ExtraTaskSettings;
 
 struct EventStruct
 {
-   byte Source;
-   byte TaskIndex; // index position in TaskSettings array, 0-11
-   byte ControllerIndex; // index position in Settings.Controller, 0-3
-   byte ProtocolIndex; // index position in protocol array, depending on which controller plugins are loaded.
-   byte NotificationIndex; // index position in Settings.Notification, 0-3
-   byte NotificationProtocolIndex; // index position in notification array, depending on which controller plugins are loaded.
-   byte BaseVarIndex;
-   int idx;
-   byte sensorType;
-   int Par1;
-   int Par2;
-   int Par3;
-   int Par4;
-   int Par5;
-   byte OriginTaskIndex;
-   String String1;
-   String String2;
-   byte *Data;
+  byte Source;
+  byte TaskIndex; // index position in TaskSettings array, 0-11
+  byte ControllerIndex; // index position in Settings.Controller, 0-3
+  byte ProtocolIndex; // index position in protocol array, depending on which controller plugins are loaded.
+  byte NotificationIndex; // index position in Settings.Notification, 0-3
+  //Edwin: Not needed, and wasnt used. We can determine the protocol index with getNotificationProtocolIndex(NotificationIndex)
+  // byte NotificationProtocolIndex; // index position in notification array, depending on which controller plugins are loaded.
+  byte BaseVarIndex;
+  int idx;
+  byte sensorType;
+  int Par1;
+  int Par2;
+  int Par3;
+  int Par4;
+  int Par5;
+  byte OriginTaskIndex;
+  String String1;
+  String String2;
+  String String3;
+  byte *Data;
 };
 
 struct LogStruct
 {
-   unsigned long timeStamp;
-   char* Message;
+  unsigned long timeStamp;
+  char* Message;
 } Logging[10];
 int logcount = -1;
 
 struct DeviceStruct
 {
-   byte Number;
-   byte Type;
-   byte VType;
-   byte Ports;
-   boolean PullUpOption;
-   boolean InverseLogicOption;
-   boolean FormulaOption;
-   byte ValueCount;
-   boolean Custom;
-   boolean SendDataOption;
-   boolean GlobalSyncOption;
-   boolean TimerOption;
-   boolean TimerOptional;
-   boolean DecimalsOnly;
+  byte Number;
+  byte Type;
+  byte VType;
+  byte Ports;
+  boolean PullUpOption;
+  boolean InverseLogicOption;
+  boolean FormulaOption;
+  byte ValueCount;
+  boolean Custom;
+  boolean SendDataOption;
+  boolean GlobalSyncOption;
+  boolean TimerOption;
+  boolean TimerOptional;
+  boolean DecimalsOnly;
 } Device[DEVICES_MAX + 1]; // 1 more because first device is empty device
 
 struct ProtocolStruct
 {
-   byte Number;
-   boolean usesMQTT;
-   boolean usesAccount;
-   boolean usesPassword;
-   int defaultPort;
-   boolean usesTemplate;
-   boolean usesID;
+  byte Number;
+  boolean usesMQTT;
+  boolean usesAccount;
+  boolean usesPassword;
+  int defaultPort;
+  boolean usesTemplate;
+  boolean usesID;
 } Protocol[CPLUGIN_MAX];
 
 struct NotificationStruct
 {
-   byte Number;
-   boolean usesMessaging;
-   byte usesGPIO;
+  byte Number;
+  boolean usesMessaging;
+  byte usesGPIO;
 } Notification[NPLUGIN_MAX];
 
 struct NodeStruct
 {
-   byte ip[4];
-   byte age;
-   uint16_t build;
-   char* nodeName;
-   byte nodeType;
+  byte ip[4];
+  byte age;
+  uint16_t build;
+  char* nodeName;
+  byte nodeType;
 } Nodes[UNIT_MAX];
 
 struct systemTimerStruct
 {
-   unsigned long timer;
-   byte plugin;
-   byte Par1;
-   byte Par2;
-   byte Par3;
+  unsigned long timer;
+  byte plugin;
+  byte Par1;
+  byte Par2;
+  byte Par3;
 } systemTimers[SYSTEM_TIMER_MAX];
 
 struct systemCMDTimerStruct
 {
-   unsigned long timer;
-   String action;
+  unsigned long timer;
+  String action;
 } systemCMDTimers[SYSTEM_CMD_TIMER_MAX];
 
 struct pinStatesStruct
 {
-   byte plugin;
-   byte index;
-   byte mode;
-   uint16_t value;
+  byte plugin;
+  byte index;
+  byte mode;
+  uint16_t value;
 } pinStates[PINSTATE_TABLE_MAX];
 
 
@@ -570,15 +628,15 @@ struct pinStatesStruct
 //max 40 bytes: ( 74 - 64 ) * 4
 struct RTCStruct
 {
-   byte ID1;
-   byte ID2;
-   boolean unused1;
-   byte factoryResetCounter;
-   byte deepSleepState;
-   byte unused2;
-   byte flashDayCounter;
-   unsigned long flashCounter;
-   unsigned long bootCounter;
+  byte ID1;
+  byte ID2;
+  boolean unused1;
+  byte factoryResetCounter;
+  byte deepSleepState;
+  byte unused2;
+  byte flashDayCounter;
+  unsigned long flashCounter;
+  unsigned long bootCounter;
 } RTC;
 
 
@@ -599,6 +657,7 @@ unsigned long timer20ms;
 unsigned long timer1s;
 unsigned long timerwd;
 unsigned long lastSend;
+unsigned long lastWeb;
 unsigned int NC_Count = 0;
 unsigned int C_Count = 0;
 byte cmd_within_mainloop = 0;
@@ -613,13 +672,13 @@ float vcc = -1.0;
 boolean WebLoggedIn = false;
 int WebLoggedInTimer = 300;
 
-boolean(*Plugin_ptr[PLUGIN_MAX])(byte, struct EventStruct*, String&);
+boolean (*Plugin_ptr[PLUGIN_MAX])(byte, struct EventStruct*, String&);
 byte Plugin_id[PLUGIN_MAX];
 
-boolean(*CPlugin_ptr[CPLUGIN_MAX])(byte, struct EventStruct*, String&);
+boolean (*CPlugin_ptr[CPLUGIN_MAX])(byte, struct EventStruct*, String&);
 byte CPlugin_id[CPLUGIN_MAX];
 
-boolean(*NPlugin_ptr[NPLUGIN_MAX])(byte, struct EventStruct*, String&);
+boolean (*NPlugin_ptr[NPLUGIN_MAX])(byte, struct EventStruct*, String&);
 byte NPlugin_id[NPLUGIN_MAX];
 
 String dummyString = "";
@@ -639,197 +698,192 @@ unsigned long dailyResetCounter = 0;
 
 String eventBuffer = "";
 
-uint16_t lowestRAM = 0;
-byte lowestRAMid = 0;
-/*
-1 savetoflash - obsolete
-2 loadfrom flash - obsolete
-3 zerofillflash - obsolete
-4 rulesprocessing
-5 handle_download
-6 handle_css
-7 handlefileupload
-8 handle_rules
-9 handle_devices
-*/
+uint32_t lowestRAM = 0;
+String lowestRAMfunction = "";
 
 /*********************************************************************************************\
  * SETUP
 \*********************************************************************************************/
 void setup()
 {
+  #if defined(ESP32)
+    for(byte x = 0; x < 16; x++)
+      ledChannelPin[x] = -1;
+  #endif
 
-   lowestRAM = FreeMem();
+  lowestRAM = FreeMem();
 
-   Serial.begin(115200);
-   // Serial.print("\n\n\nBOOOTTT\n\n\n");
+  Serial.begin(115200);
+  // Serial.print("\n\n\nBOOOTTT\n\n\n");
 
-   initLog();
-
-
-   if (SpiffsSectors() < 32)
-   {
-      Serial.println(F("\nNo (or too small) SPIFFS area..\nSystem Halted\nPlease reflash with 128k SPIFFS minimum!"));
-      while (true)
-         delay(1);
-   }
-
-   emergencyReset();
-
-   String log = F("\n\n\rINIT : Booting version: ");
-   log += BUILD_GIT;
-   addLog(LOG_LEVEL_INFO, log);
+  initLog();
 
 
-   //warm boot
-   if (readFromRTC())
-   {
-      RTC.bootCounter++;
-      readUserVarFromRTC();
+  if (SpiffsSectors() < 32)
+  {
+    Serial.println(F("\nNo (or too small) SPIFFS area..\nSystem Halted\nPlease reflash with 128k SPIFFS minimum!"));
+    while (true)
+      delay(1);
+  }
 
-      if (RTC.deepSleepState == 1)
-      {
-         log = F("INIT : Rebooted from deepsleep #");
-         lastBootCause = BOOT_CAUSE_DEEP_SLEEP;
-      }
-      else
-         log = F("INIT : Warm boot #");
+  emergencyReset();
 
-      log += RTC.bootCounter;
-
-   }
-   //cold boot (RTC memory empty)
-   else
-   {
-      initRTC();
-
-      // cold boot situation
-      if (lastBootCause == BOOT_CAUSE_MANUAL_REBOOT) // only set this if not set earlier during boot stage.
-         lastBootCause = BOOT_CAUSE_COLD_BOOT;
-      log = F("INIT : Cold Boot");
-   }
-
-   RTC.deepSleepState = 0;
-   saveToRTC();
-
-   addLog(LOG_LEVEL_INFO, log);
+  String log = F("\n\n\rINIT : Booting version: ");
+  log += BUILD_GIT;
+  addLog(LOG_LEVEL_INFO, log);
 
 
+  //warm boot
+  if (readFromRTC())
+  {
+    RTC.bootCounter++;
+    readUserVarFromRTC();
+
+    if (RTC.deepSleepState == 1)
+    {
+      log = F("INIT : Rebooted from deepsleep #");
+      lastBootCause=BOOT_CAUSE_DEEP_SLEEP;
+    }
+    else
+      log = F("INIT : Warm boot #");
+
+    log += RTC.bootCounter;
+
+  }
+  //cold boot (RTC memory empty)
+  else
+  {
+    initRTC();
+
+    // cold boot situation
+    if (lastBootCause == BOOT_CAUSE_MANUAL_REBOOT) // only set this if not set earlier during boot stage.
+      lastBootCause = BOOT_CAUSE_COLD_BOOT;
+    log = F("INIT : Cold Boot");
+  }
+
+  RTC.deepSleepState=0;
+  saveToRTC();
+
+  addLog(LOG_LEVEL_INFO, log);
+
+  fileSystemCheck();
+  LoadSettings();
+        
+  if (strcasecmp(SecuritySettings.WifiSSID, "ssid") == 0)
+    wifiSetup = true;
+
+  ExtraTaskSettings.TaskIndex = 255; // make sure this is an unused nr to prevent cache load on boot
+
+  // if different version, eeprom settings structure has changed. Full Reset needed
+  // on a fresh ESP module eeprom values are set to 255. Version results into -1 (signed int)
+  if (Settings.Version != VERSION || Settings.PID != ESP_PROJECT_PID)
+  {
+    // Direct Serial is allowed here, since this is only an emergency task.
+    Serial.print(F("\nPID:"));
+    Serial.println(Settings.PID);
+    Serial.print(F("Version:"));
+    Serial.println(Settings.Version);
+    Serial.println(F("INIT : Incorrect PID or version!"));
+    delay(1000);
+    ResetFactory();
+  }
+
+  if (Settings.UseSerial)
+  {
+    //make sure previous serial buffers are flushed before resetting baudrate
+    Serial.flush();
+    Serial.begin(Settings.BaudRate);
+  }
+
+  if (Settings.Build != BUILD)
+    BuildFixes();
 
 
-   fileSystemCheck();
-   LoadSettings();
+  log = F("INIT : Free RAM:");
+  log += FreeMem();
+  addLog(LOG_LEVEL_INFO, log);
 
-   if (strcasecmp(SecuritySettings.WifiSSID, "ssid") == 0)
-      wifiSetup = true;
+  if (Settings.UseSerial && Settings.SerialLogLevel >= LOG_LEVEL_DEBUG_MORE)
+    Serial.setDebugOutput(true);
 
-   ExtraTaskSettings.TaskIndex = 255; // make sure this is an unused nr to prevent cache load on boot
+  hardwareInit();
 
-   // if different version, eeprom settings structure has changed. Full Reset needed
-   // on a fresh ESP module eeprom values are set to 255. Version results into -1 (signed int)
-   if (Settings.Version != VERSION || Settings.PID != ESP_PROJECT_PID)
-   {
-      // Direct Serial is allowed here, since this is only an emergency task.
-      Serial.print(F("\nPID:"));
-      Serial.println(Settings.PID);
-      Serial.print(F("Version:"));
-      Serial.println(Settings.Version);
-      Serial.println(F("INIT : Incorrect PID or version!"));
-      delay(1000);
-      ResetFactory();
-   }
+  WiFi.persistent(false); // Do not use SDK storage of SSID/WPA parameters
+  WifiAPconfig();
 
-   if (Settings.UseSerial)
-      Serial.begin(Settings.BaudRate);
+  if (Settings.deepSleep)
+  {
+    //only one attempt in deepsleep, to conserve battery
+    if (!WifiConnect(1))
+    {
+        if (Settings.deepSleepOnFail)
+        {
+          addLog(LOG_LEVEL_ERROR, F("SLEEP: Connection failed, going back to sleep."));
+          deepSleep(Settings.Delay);
+        }
+    }
+  }
+  else
+    // 3 connect attempts
+    WifiConnect(3);
 
-   if (Settings.Build != BUILD)
-      BuildFixes();
+  #ifdef FEATURE_REPORTING
+  ReportStatus();
+  #endif
 
+  //After booting, we want all the tasks to run without delaying more than neccesary.
+  //Plugins that need an initial startup delay need to overwrite their initial timerSensor value in PLUGIN_INIT
+  //They should also check if we returned from deep sleep so that they can skip the delay in that case.
+  for (byte x = 0; x < TASKS_MAX; x++)
+    if (Settings.TaskDeviceTimer[x] !=0)
+      timerSensor[x] = millis() + (x * Settings.MessageDelay);
 
-   log = F("INIT : Free RAM:");
-   log += FreeMem();
-   addLog(LOG_LEVEL_INFO, log);
+  timer100ms = 0; // timer for periodic actions 10 x per/sec
+  timer1s = 0; // timer for periodic actions once per/sec
+  timerwd = 0; // timer for watchdog once per 30 sec
 
-   if (Settings.UseSerial && Settings.SerialLogLevel >= LOG_LEVEL_DEBUG_MORE)
-      Serial.setDebugOutput(true);
+  PluginInit();
+  CPluginInit();
+  NPluginInit();
 
-   hardwareInit();
+  WebServerInit();
 
-   WiFi.persistent(false); // Do not use SDK storage of SSID/WPA parameters
-   WifiAPconfig();
+  #ifdef FEATURE_ARDUINO_OTA
+  ArduinoOTAInit();
+  #endif
 
-   if (Settings.deepSleep)
-   {
-      //only one attempt in deepsleep, to conserve battery
-      if (!WifiConnect(1))
-      {
-         if (Settings.deepSleepOnFail)
-         {
-            addLog(LOG_LEVEL_ERROR, F("SLEEP: Connection failed, going back to sleep."));
-            deepSleep(Settings.Delay);
-         }
-      }
-   }
-   else
-      // 3 connect attempts
-      WifiConnect(3);
+  // setup UDP
+  if (Settings.UDPPort != 0)
+    portUDP.begin(Settings.UDPPort);
 
-#ifdef FEATURE_REPORTING
-   ReportStatus();
-#endif
+  // Setup MQTT Client
+  byte ProtocolIndex = getProtocolIndex(Settings.Protocol[0]);
+  if (Protocol[ProtocolIndex].usesMQTT && Settings.ControllerEnabled[0])
+    MQTTConnect();
 
-   //After booting, we want all the tasks to run without delaying more than neccesary.
-   //Plugins that need an initial startup delay need to overwrite their initial timerSensor value in PLUGIN_INIT
-   //They should also check if we returned from deep sleep so that they can skip the delay in that case.
-   for (byte x = 0; x < TASKS_MAX; x++)
-      if (Settings.TaskDeviceTimer[x] != 0)
-         timerSensor[x] = millis() + (x * Settings.MessageDelay);
+  sendSysInfoUDP(3);
 
-   timer100ms = 0; // timer for periodic actions 10 x per/sec
-   timer1s = 0; // timer for periodic actions once per/sec
-   timerwd = 0; // timer for watchdog once per 30 sec
-
-   PluginInit();
-   CPluginInit();
-   NPluginInit();
-
-   WebServerInit();
-
-#ifdef FEATURE_ARDUINO_OTA
-   ArduinoOTAInit();
-#endif
-
-   // setup UDP
-   if (Settings.UDPPort != 0)
-      portUDP.begin(Settings.UDPPort);
-
-   // Setup MQTT Client
-   byte ProtocolIndex = getProtocolIndex(Settings.Protocol[0]);
-   if (Protocol[ProtocolIndex].usesMQTT && Settings.ControllerEnabled[0])
-      MQTTConnect();
-
-   sendSysInfoUDP(3);
-
-   if (Settings.UseNTP)
-      initTime();
+  if (Settings.UseNTP)
+    initTime();
 
 #if FEATURE_ADC_VCC
-   vcc = ESP.getVcc() / 1000.0;
+  vcc = ESP.getVcc() / 1000.0;
 #endif
 
-   // Start DNS, only used if the ESP has no valid WiFi config
-   // It will reply with it's own address on all DNS requests
-   // (captive portal concept)
-   if (wifiSetup)
-      dnsServer.start(DNS_PORT, "*", apIP);
+  // Start DNS, only used if the ESP has no valid WiFi config
+  // It will reply with it's own address on all DNS requests
+  // (captive portal concept)
+  if (wifiSetup)
+    dnsServer.start(DNS_PORT, "*", apIP);
 
-   if (Settings.UseRules)
-   {
-      String event = F("System#Boot");
-      rulesProcessing(event);
-   }
+  if (Settings.UseRules)
+  {
+    String event = F("System#Boot");
+    rulesProcessing(event);
+  }
 
-   writeDefaultCSS();
+  writeDefaultCSS();
+
 }
 
 
@@ -838,45 +892,44 @@ void setup()
 \*********************************************************************************************/
 void loop()
 {
-   loopCounter++;
+  loopCounter++;
 
-   if (wifiSetupConnect)
-   {
-      // try to connect for setup wizard
-      WifiConnect(1);
-      wifiSetupConnect = false;
-   }
+  if (wifiSetupConnect)
+  {
+    // try to connect for setup wizard
+    WifiConnect(1);
+    wifiSetupConnect = false;
+  }
 
 
-   // Deep sleep mode, just run all tasks one time and go back to sleep as fast as possible
-   if (isDeepSleepEnabled())
-   {
+  // Deep sleep mode, just run all tasks one time and go back to sleep as fast as possible
+  if (isDeepSleepEnabled())
+  {
       run50TimesPerSecond();
       run10TimesPerSecond();
       runEach30Seconds();
       runOncePerSecond();
       deepSleep(Settings.Delay);
       //deepsleep will never return, its a special kind of reboot
-   }
-   //normal mode, run each task when its time
-   else
-   {
+  }
+  //normal mode, run each task when its time
+  else
+  {
 
-      if (millis() > timer20ms)
-         run50TimesPerSecond();
+    if (millis() > timer20ms)
+      run50TimesPerSecond();
 
-      if (millis() > timer100ms)
-         run10TimesPerSecond();
+    if (millis() > timer100ms)
+      run10TimesPerSecond();
 
-      if (millis() > timerwd)
-         runEach30Seconds();
+    if (millis() > timerwd)
+      runEach30Seconds();
 
-      if (millis() > timer1s)
-         runOncePerSecond();
-   }
-   backgroundtasks();
+    if (millis() > timer1s)
+      runOncePerSecond();
+  }
+  backgroundtasks();
 
-   delay(50); // sleep 50ms
 }
 
 
@@ -886,10 +939,10 @@ void loop()
 
 void run50TimesPerSecond()
 {
-   timer20ms = millis() + 20;
-   PluginCall(PLUGIN_FIFTY_PER_SECOND, 0, dummyString);
+  timer20ms = millis() + 20;
+  PluginCall(PLUGIN_FIFTY_PER_SECOND, 0, dummyString);
 
-   // statusLED(false);
+  // statusLED(false);
 }
 
 /*********************************************************************************************\
@@ -897,15 +950,15 @@ void run50TimesPerSecond()
 \*********************************************************************************************/
 void run10TimesPerSecond()
 {
-   start = micros();
-   timer100ms = millis() + 100;
-   PluginCall(PLUGIN_TEN_PER_SECOND, 0, dummyString);
-   if (Settings.UseRules && eventBuffer.length() > 0)
-   {
-      rulesProcessing(eventBuffer);
-      eventBuffer = "";
-   }
-   elapsed = micros() - start;
+  start = micros();
+  timer100ms = millis() + 100;
+  PluginCall(PLUGIN_TEN_PER_SECOND, 0, dummyString);
+  if (Settings.UseRules && eventBuffer.length() > 0)
+  {
+    rulesProcessing(eventBuffer);
+    eventBuffer = "";
+  }
+  elapsed = micros() - start;
 }
 
 
@@ -914,85 +967,90 @@ void run10TimesPerSecond()
 \*********************************************************************************************/
 void runOncePerSecond()
 {
-   dailyResetCounter++;
-   if (dailyResetCounter > 86400) // 1 day elapsed... //86400
-   {
-      RTC.flashDayCounter = 0;
-      saveToRTC();
-      dailyResetCounter = 0;
-      String log = F("SYS  : Reset 24h counters");
-      addLog(LOG_LEVEL_INFO, log);
-   }
+  dailyResetCounter++;
+  if (dailyResetCounter > 86400) // 1 day elapsed... //86400
+  {
+    RTC.flashDayCounter=0;
+    saveToRTC();
+    dailyResetCounter=0;
+    String log = F("SYS  : Reset 24h counters");
+    addLog(LOG_LEVEL_INFO, log);
+  }
 
-   timer1s = millis() + 1000;
+  timer1s = millis() + 1000;
 
-   checkSensors();
+  checkSensors();
 
-   if (Settings.ConnectionFailuresThreshold)
-      if (connectionFailures > Settings.ConnectionFailuresThreshold)
-         delayedReboot(60);
+  if (Settings.ConnectionFailuresThreshold)
+    if (connectionFailures > Settings.ConnectionFailuresThreshold)
+      delayedReboot(60);
 
-   if (cmd_within_mainloop != 0)
-   {
-      switch (cmd_within_mainloop)
-      {
+  if (cmd_within_mainloop != 0)
+  {
+    switch (cmd_within_mainloop)
+    {
       case CMD_WIFI_DISCONNECT:
-      {
-         WifiDisconnect();
-         break;
-      }
+        {
+          WifiDisconnect();
+          break;
+        }
       case CMD_REBOOT:
-      {
-         ESP.reset();
-         break;
-      }
-      }
-      cmd_within_mainloop = 0;
-   }
+        {
+          #if defined(ESP8266)
+            ESP.reset();
+          #endif
+          #if defined(ESP32)
+            ESP.restart();
+          #endif
+          break;
+        }
+    }
+    cmd_within_mainloop = 0;
+  }
 
-   // clock events
-   if (Settings.UseNTP)
-      checkTime();
+  // clock events
+  if (Settings.UseNTP)
+    checkTime();
 
-   unsigned long timer = micros();
-   PluginCall(PLUGIN_ONCE_A_SECOND, 0, dummyString);
+  unsigned long timer = micros();
+  PluginCall(PLUGIN_ONCE_A_SECOND, 0, dummyString);
 
-   checkSystemTimers();
+  checkSystemTimers();
 
-   if (Settings.UseRules)
-      rulesTimers();
+  if (Settings.UseRules)
+    rulesTimers();
 
-   timer = micros() - timer;
+  timer = micros() - timer;
 
-   if (SecuritySettings.Password[0] != 0)
-   {
-      if (WebLoggedIn)
-         WebLoggedInTimer++;
-      if (WebLoggedInTimer > 300)
-         WebLoggedIn = false;
-   }
+  if (SecuritySettings.Password[0] != 0)
+  {
+    if (WebLoggedIn)
+      WebLoggedInTimer++;
+    if (WebLoggedInTimer > 300)
+      WebLoggedIn = false;
+  }
 
-   // I2C Watchdog feed
-   if (Settings.WDI2CAddress != 0)
-   {
-      Wire.beginTransmission(Settings.WDI2CAddress);
-      Wire.write(0xA5);
-      Wire.endTransmission();
-   }
+  // I2C Watchdog feed
+  if (Settings.WDI2CAddress != 0)
+  {
+    Wire.beginTransmission(Settings.WDI2CAddress);
+    Wire.write(0xA5);
+    Wire.endTransmission();
+  }
 
-   if (Settings.SerialLogLevel == 5)
-   {
-      Serial.print(F("10 ps:"));
-      Serial.print(elapsed);
-      Serial.print(F(" uS  1 ps:"));
-      Serial.println(timer);
-   }
+  if (Settings.SerialLogLevel == 5)
+  {
+    Serial.print(F("10 ps:"));
+    Serial.print(elapsed);
+    Serial.print(F(" uS  1 ps:"));
+    Serial.println(timer);
+  }
 
-   if (timerAPoff != 0 && millis() > timerAPoff)
-   {
-      timerAPoff = 0;
-      WifiAPMode(false);
-   }
+  if (timerAPoff != 0 && millis() > timerAPoff)
+  {
+    timerAPoff = 0;
+    WifiAPMode(false);
+  }
 }
 
 /*********************************************************************************************\
@@ -1000,33 +1058,35 @@ void runOncePerSecond()
 \*********************************************************************************************/
 void runEach30Seconds()
 {
-   wdcounter++;
-   timerwd = millis() + 30000;
-   char str[60];
-   str[0] = 0;
-   sprintf_P(str, PSTR("Uptime %u ConnectFailures %u FreeMem %u"), wdcounter / 2, connectionFailures, FreeMem());
-   String log = F("WD   : ");
-   log += str;
-   addLog(LOG_LEVEL_INFO, log);
-   sendSysInfoUDP(1);
-   refreshNodeList();
-   if (Settings.ControllerEnabled[0])
-      MQTTCheck();
-   if (Settings.UseSSDP)
-      SSDP_update();
+  wdcounter++;
+  timerwd = millis() + 30000;
+  char str[60];
+  str[0] = 0;
+  sprintf_P(str, PSTR("Uptime %u ConnectFailures %u FreeMem %u"), wdcounter / 2, connectionFailures, FreeMem());
+  String log = F("WD   : ");
+  log += str;
+  addLog(LOG_LEVEL_INFO, log);
+  sendSysInfoUDP(1);
+  refreshNodeList();
+  if(Settings.ControllerEnabled[0])
+    MQTTCheck();
+  #if defined(ESP8266)
+  if (Settings.UseSSDP)
+    SSDP_update();
+  #endif
 #if FEATURE_ADC_VCC
-   vcc = ESP.getVcc() / 1000.0;
+  vcc = ESP.getVcc() / 1000.0;
 #endif
-   loopCounterLast = loopCounter;
-   loopCounter = 0;
-   if (loopCounterLast > loopCounterMax)
-      loopCounterMax = loopCounterLast;
+  loopCounterLast = loopCounter;
+  loopCounter = 0;
+  if (loopCounterLast > loopCounterMax)
+    loopCounterMax = loopCounterLast;
 
-   WifiCheck();
+  WifiCheck();
 
-#ifdef FEATURE_REPORTING
-   ReportStatus();
-#endif
+  #ifdef FEATURE_REPORTING
+  ReportStatus();
+  #endif
 
 }
 
@@ -1036,22 +1096,22 @@ void runEach30Seconds()
 \*********************************************************************************************/
 void checkSensors()
 {
-   bool isDeepSleep = isDeepSleepEnabled();
-   //check all the devices and only run the sendtask if its time, or we if we used deep sleep mode
-   for (byte x = 0; x < TASKS_MAX; x++)
-   {
-      if (
-         (Settings.TaskDeviceTimer[x] != 0) &&
-         (isDeepSleep || (millis() > timerSensor[x]))
-         )
-      {
-         timerSensor[x] = millis() + Settings.TaskDeviceTimer[x] * 1000;
-         if (timerSensor[x] == 0) // small fix if result is 0, else timer will be stopped...
-            timerSensor[x] = 1;
-         SensorSendTask(x);
-      }
-   }
-   saveUserVarToRTC();
+  bool isDeepSleep = isDeepSleepEnabled();
+  //check all the devices and only run the sendtask if its time, or we if we used deep sleep mode
+  for (byte x = 0; x < TASKS_MAX; x++)
+  {
+    if (
+        (Settings.TaskDeviceTimer[x] != 0) &&
+        (isDeepSleep || (millis() > timerSensor[x]))
+    )
+    {
+      timerSensor[x] = millis() + Settings.TaskDeviceTimer[x] * 1000;
+      if (timerSensor[x] == 0) // small fix if result is 0, else timer will be stopped...
+        timerSensor[x] = 1;
+      SensorSendTask(x);
+    }
+  }
+  saveUserVarToRTC();
 }
 
 
@@ -1072,191 +1132,188 @@ void checkSensors()
 \*********************************************************************************************/
 void SensorSendTask(byte TaskIndex)
 {
-   if (Settings.TaskDeviceEnabled[TaskIndex])
-   {
-      byte varIndex = TaskIndex * VARS_PER_TASK;
+  if (Settings.TaskDeviceEnabled[TaskIndex])
+  {
+    byte varIndex = TaskIndex * VARS_PER_TASK;
 
-      boolean success = false;
-      byte DeviceIndex = getDeviceIndex(Settings.TaskDeviceNumber[TaskIndex]);
-      LoadTaskSettings(TaskIndex);
+    boolean success = false;
+    byte DeviceIndex = getDeviceIndex(Settings.TaskDeviceNumber[TaskIndex]);
+    LoadTaskSettings(TaskIndex);
 
-      struct EventStruct TempEvent;
-      TempEvent.TaskIndex = TaskIndex;
-      TempEvent.BaseVarIndex = varIndex;
-      // TempEvent.idx = Settings.TaskDeviceID[TaskIndex]; todo check
+    struct EventStruct TempEvent;
+    TempEvent.TaskIndex = TaskIndex;
+    TempEvent.BaseVarIndex = varIndex;
+    // TempEvent.idx = Settings.TaskDeviceID[TaskIndex]; todo check
+    TempEvent.sensorType = Device[DeviceIndex].VType;
 
-      TempEvent.sensorType = Device[DeviceIndex].VType;
+    float preValue[VARS_PER_TASK]; // store values before change, in case we need it in the formula
+    for (byte varNr = 0; varNr < VARS_PER_TASK; varNr++)
+      preValue[varNr] = UserVar[varIndex + varNr];
 
-      float preValue[VARS_PER_TASK]; // store values before change, in case we need it in the formula
+    if(Settings.TaskDeviceDataFeed[TaskIndex] == 0)  // only read local connected sensorsfeeds
+      success = PluginCall(PLUGIN_READ, &TempEvent, dummyString);
+    else
+      success = true;
+
+    if (success)
+    {
       for (byte varNr = 0; varNr < VARS_PER_TASK; varNr++)
-         preValue[varNr] = UserVar[varIndex + varNr];
-
-      if (Settings.TaskDeviceDataFeed[TaskIndex] == 0)  // only read local connected sensorsfeeds
-         success = PluginCall(PLUGIN_READ, &TempEvent, dummyString);
-      else
-         success = true;
-
-      if (success)
       {
-         for (byte varNr = 0; varNr < VARS_PER_TASK; varNr++)
-         {
-            if (ExtraTaskSettings.TaskDeviceFormula[varNr][0] != 0)
-            {
-               String spreValue = String(preValue[varNr]);
-               String formula = ExtraTaskSettings.TaskDeviceFormula[varNr];
-               float value = UserVar[varIndex + varNr];
-               float result = 0;
-               String svalue = String(value);
-               formula.replace(F("%pvalue%"), spreValue);
-               formula.replace(F("%value%"), svalue);
-               byte error = Calculate(formula.c_str(), &result);
-               if (error == 0)
-                  UserVar[varIndex + varNr] = result;
-            }
-         }
-         sendData(&TempEvent);
+        if (ExtraTaskSettings.TaskDeviceFormula[varNr][0] != 0)
+        {
+          String spreValue = String(preValue[varNr]);
+          String formula = ExtraTaskSettings.TaskDeviceFormula[varNr];
+          float value = UserVar[varIndex + varNr];
+          float result = 0;
+          String svalue = String(value);
+          formula.replace(F("%pvalue%"), spreValue);
+          formula.replace(F("%value%"), svalue);
+          byte error = Calculate(formula.c_str(), &result);
+          if (error == 0)
+            UserVar[varIndex + varNr] = result;
+        }
       }
-   }
+      sendData(&TempEvent);
+    }
+  }
 }
 
 
 /*********************************************************************************************\
  * set global system timer
 \*********************************************************************************************/
-boolean setSystemTimer(unsigned long timer, byte plugin, byte Par1, byte Par2, byte Par3)
+void setSystemTimer(unsigned long timer, byte plugin, byte Par1, byte Par2, byte Par3)
 {
-   // plugin number and par1 form a unique key that can be used to restart a timer
-   // first check if a timer is not already running for this request
-   boolean reUse = false;
-   for (byte x = 0; x < SYSTEM_TIMER_MAX; x++)
-      if (systemTimers[x].timer != 0)
+  // plugin number and par1 form a unique key that can be used to restart a timer
+  // first check if a timer is not already running for this request
+  boolean reUse = false;
+  for (byte x = 0; x < SYSTEM_TIMER_MAX; x++)
+    if (systemTimers[x].timer != 0)
+    {
+      if ((systemTimers[x].plugin == plugin) && (systemTimers[x].Par1 == Par1))
       {
-         if ((systemTimers[x].plugin == plugin) && (systemTimers[x].Par1 == Par1))
-         {
-            systemTimers[x].timer = millis() + timer;
-            reUse = true;
-            break;
-         }
+        systemTimers[x].timer = millis() + timer;
+        reUse = true;
+        break;
       }
+    }
 
-   if (!reUse)
-   {
-      // find a new free timer slot...
-      for (byte x = 0; x < SYSTEM_TIMER_MAX; x++)
-         if (systemTimers[x].timer == 0)
-         {
-            systemTimers[x].timer = millis() + timer;
-            systemTimers[x].plugin = plugin;
-            systemTimers[x].Par1 = Par1;
-            systemTimers[x].Par2 = Par2;
-            systemTimers[x].Par3 = Par3;
-            break;
-         }
-   }
+  if (!reUse)
+  {
+    // find a new free timer slot...
+    for (byte x = 0; x < SYSTEM_TIMER_MAX; x++)
+      if (systemTimers[x].timer == 0)
+      {
+        systemTimers[x].timer = millis() + timer;
+        systemTimers[x].plugin = plugin;
+        systemTimers[x].Par1 = Par1;
+        systemTimers[x].Par2 = Par2;
+        systemTimers[x].Par3 = Par3;
+        break;
+      }
+  }
 }
 
 
+//EDWIN: this function seems to be unused?
 /*********************************************************************************************\
  * set global system command timer
 \*********************************************************************************************/
-boolean setSystemCMDTimer(unsigned long timer, String& action)
+void setSystemCMDTimer(unsigned long timer, String& action)
 {
-   for (byte x = 0; x < SYSTEM_CMD_TIMER_MAX; x++)
-      if (systemCMDTimers[x].timer == 0)
-      {
-         systemCMDTimers[x].timer = millis() + timer;
-         systemCMDTimers[x].action = action;
-         break;
-      }
+  for (byte x = 0; x < SYSTEM_CMD_TIMER_MAX; x++)
+    if (systemCMDTimers[x].timer == 0)
+    {
+      systemCMDTimers[x].timer = millis() + timer;
+      systemCMDTimers[x].action = action;
+      break;
+    }
 }
 
 
 /*********************************************************************************************\
  * check global system timers
 \*********************************************************************************************/
-boolean checkSystemTimers()
+void checkSystemTimers()
 {
-   for (byte x = 0; x < SYSTEM_TIMER_MAX; x++)
-      if (systemTimers[x].timer != 0)
+  for (byte x = 0; x < SYSTEM_TIMER_MAX; x++)
+    if (systemTimers[x].timer != 0)
+    {
+      if (timeOut(systemTimers[x].timer))
       {
-         if (timeOut(systemTimers[x].timer))
-         {
-            struct EventStruct TempEvent;
-            TempEvent.Par1 = systemTimers[x].Par1;
-            TempEvent.Par2 = systemTimers[x].Par2;
-            TempEvent.Par3 = systemTimers[x].Par3;
-
-            byte pluginID = systemTimers[x].plugin;
-
-            // Reset timer
-            systemTimers[x].timer = 0;
-            systemTimers[x].plugin = 0;
-
-            for (byte y = 0; y < PLUGIN_MAX; y++)
-               if (Plugin_id[y] == pluginID)
-                  Plugin_ptr[y](PLUGIN_TIMER_IN, &TempEvent, dummyString);
-         }
+        struct EventStruct TempEvent;
+        TempEvent.Par1 = systemTimers[x].Par1;
+        TempEvent.Par2 = systemTimers[x].Par2;
+        TempEvent.Par3 = systemTimers[x].Par3;
+        for (byte y = 0; y < PLUGIN_MAX; y++)
+          if (Plugin_id[y] == systemTimers[x].plugin)
+            Plugin_ptr[y](PLUGIN_TIMER_IN, &TempEvent, dummyString);
+        systemTimers[x].timer = 0;
       }
+    }
 
-   for (byte x = 0; x < SYSTEM_CMD_TIMER_MAX; x++)
-      if (systemCMDTimers[x].timer != 0)
-         if (timeOut(systemCMDTimers[x].timer))
-         {
-            struct EventStruct TempEvent;
-            parseCommandString(&TempEvent, systemCMDTimers[x].action);
-            if (!PluginCall(PLUGIN_WRITE, &TempEvent, systemCMDTimers[x].action))
-               ExecuteCommand(VALUE_SOURCE_SYSTEM, systemCMDTimers[x].action.c_str());
-            systemCMDTimers[x].timer = 0;
-            systemCMDTimers[x].action = "";
-         }
+  for (byte x = 0; x < SYSTEM_CMD_TIMER_MAX; x++)
+    if (systemCMDTimers[x].timer != 0)
+      if (timeOut(systemCMDTimers[x].timer))
+      {
+        struct EventStruct TempEvent;
+        parseCommandString(&TempEvent, systemCMDTimers[x].action);
+        if (!PluginCall(PLUGIN_WRITE, &TempEvent, systemCMDTimers[x].action))
+          ExecuteCommand(VALUE_SOURCE_SYSTEM, systemCMDTimers[x].action.c_str());
+        systemCMDTimers[x].timer = 0;
+        systemCMDTimers[x].action = "";
+      }
 }
 
 
 /*********************************************************************************************\
  * run background tasks
 \*********************************************************************************************/
-bool runningBackgroundTasks = false;
+bool runningBackgroundTasks=false;
 void backgroundtasks()
 {
-   //prevent recursion!
-   if (runningBackgroundTasks)
-   {
-      yield();
-      return;
-   }
-   runningBackgroundTasks = true;
+  //prevent recursion!
+  if (runningBackgroundTasks)
+  {
+    yield();
+    return;
+  }
+  runningBackgroundTasks=true;
 
-   tcpCleanup();
+  #if defined(ESP8266)
+    tcpCleanup();
+  #endif
 
-   if (Settings.UseSerial)
-      if (Serial.available())
-         if (!PluginCall(PLUGIN_SERIAL_IN, 0, dummyString))
-            serial();
+  if (Settings.UseSerial)
+    if (Serial.available())
+      if (!PluginCall(PLUGIN_SERIAL_IN, 0, dummyString))
+        serial();
 
-   // process DNS, only used if the ESP has no valid WiFi config
-   if (wifiSetup)
-      dnsServer.processNextRequest();
+  // process DNS, only used if the ESP has no valid WiFi config
+  if (wifiSetup)
+    dnsServer.processNextRequest();
 
-   WebServer.handleClient();
-   if (Settings.ControllerEnabled[0])
-      MQTTclient.loop();
-   checkUDP();
+  WebServer.handleClient();
+  if(Settings.ControllerEnabled[0])
+    MQTTclient.loop();
+  checkUDP();
 
-#ifdef FEATURE_ARDUINO_OTA
-   ArduinoOTA.handle();
+  #ifdef FEATURE_ARDUINO_OTA
+  if(Settings.ArduinoOTAEnable)
+    ArduinoOTA.handle();
 
-   //once OTA is triggered, only handle that and dont do other stuff. (otherwise it fails)
-   while (ArduinoOTAtriggered)
-   {
-      yield();
-      ArduinoOTA.handle();
-   }
+  //once OTA is triggered, only handle that and dont do other stuff. (otherwise it fails)
+  while (ArduinoOTAtriggered)
+  {
+    yield();
+    ArduinoOTA.handle();
+  }
 
-#endif
+  #endif
 
-   yield();
+  yield();
 
-   statusLED(false);
+  statusLED(false);
 
-   runningBackgroundTasks = false;
+  runningBackgroundTasks=false;
 }

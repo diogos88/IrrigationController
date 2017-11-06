@@ -2,7 +2,7 @@ char* ramtest;
 
 //Reads a string from a stream until a terminator-character.
 //We make sure we're not reading more than maxSize bytes and we're not busy for longer than timeout mS.
-bool safeReadStringUntil(Stream &input, String &str, char terminator, int maxSize=1024, int timeout=1000)
+bool safeReadStringUntil(Stream &input, String &str, char terminator, unsigned int maxSize=1024, unsigned int timeout=1000)
 {
     unsigned long startMillis;
     int c;
@@ -100,11 +100,14 @@ void ExecuteCommand(byte source, const char *Line)
     {
       if (Settings.NotificationEnabled[Par1 - 1] && Settings.Notification[Par1 - 1] != 0)
       {
-        byte NotificationProtocolIndex = getNotificationIndex(Settings.Notification[Par1 - 1]);
-        struct EventStruct TempEvent;
-        TempEvent.NotificationProtocolIndex = Par1 - 1;
-        if (NPlugin_id[NotificationProtocolIndex] != 0)
+        byte NotificationProtocolIndex = getNotificationProtocolIndex(Settings.Notification[Par1 - 1]);
+        if (NotificationProtocolIndex!=NPLUGIN_NOT_FOUND)
+        {
+          struct EventStruct TempEvent;
+          // TempEvent.NotificationProtocolIndex = NotificationProtocolIndex;
+          TempEvent.NotificationIndex=Par1-1;
           NPlugin_ptr[NotificationProtocolIndex](NPLUGIN_NOTIFY, &TempEvent, message);
+        }
       }
     }
   }
@@ -149,7 +152,7 @@ void ExecuteCommand(byte source, const char *Line)
   {
     Serial.print(lowestRAM);
     Serial.print(F(" : "));
-    Serial.println(lowestRAMid);
+    Serial.println(lowestRAMfunction);
     success = true;
   }
 
@@ -259,6 +262,14 @@ void ExecuteCommand(byte source, const char *Line)
   // commands for rules
   // ****************************************
 
+  if (strcasecmp_P(Command, PSTR("config")) == 0)
+  {
+    success = true;
+    struct EventStruct TempEvent;
+    String request = Line;
+    remoteConfig(&TempEvent, request);
+  }
+
   if (strcasecmp_P(Command, PSTR("deepSleep")) == 0)
   {
     success = true;
@@ -272,7 +283,7 @@ void ExecuteCommand(byte source, const char *Line)
     if (GetArgv(Line, TmpStr1, 4))
     {
       float result = 0;
-      byte error = Calculate(TmpStr1, &result);
+      Calculate(TmpStr1, &result);
       UserVar[(VARS_PER_TASK * (Par1 - 1)) + Par2 - 1] = result;
     }
   }
@@ -365,7 +376,9 @@ void ExecuteCommand(byte source, const char *Line)
     str2ip((char*)ip.c_str(), ipaddress);
     IPAddress UDP_IP(ipaddress[0], ipaddress[1], ipaddress[2], ipaddress[3]);
     portUDP.beginPacket(UDP_IP, port.toInt());
-    portUDP.write(message.c_str(), message.length());
+    #if defined(ESP8266)
+      portUDP.write(message.c_str(), message.length());
+    #endif
     portUDP.endPacket();
   }
 
@@ -455,6 +468,24 @@ void ExecuteCommand(byte source, const char *Line)
     success = true;
   }
 
+  if (strcasecmp_P(Command, PSTR("Unit")) == 0)
+  {
+    success = true;
+    Settings.Unit=Par1;
+  }
+
+  if (strcasecmp_P(Command, PSTR("Name")) == 0)
+  {
+    success = true;
+    strcpy(Settings.Name, Line + 5);
+  }
+
+  if (strcasecmp_P(Command, PSTR("Password")) == 0)
+  {
+    success = true;
+    strcpy(SecuritySettings.Password, Line + 9);
+  }
+
 
   if (strcasecmp_P(Command, PSTR("Reboot")) == 0)
   {
@@ -462,7 +493,12 @@ void ExecuteCommand(byte source, const char *Line)
     pinMode(0, INPUT);
     pinMode(2, INPUT);
     pinMode(15, INPUT);
-    ESP.reset();
+    #if defined(ESP8266)
+      ESP.reset();
+    #endif
+    #if defined(ESP32)
+      ESP.restart();
+    #endif
   }
 
   if (strcasecmp_P(Command, PSTR("Restart")) == 0)
@@ -521,6 +557,7 @@ void ExecuteCommand(byte source, const char *Line)
     sprintf_P(str, PSTR("%u.%u.%u.%u"), ip[0], ip[1], ip[2], ip[3]);
     Serial.print(F("  IP Address    : ")); Serial.println(str);
     Serial.print(F("  Build         : ")); Serial.println((int)BUILD);
+    Serial.print(F("  Name          : ")); Serial.println(Settings.Name);
     Serial.print(F("  Unit          : ")); Serial.println((int)Settings.Unit);
     Serial.print(F("  WifiSSID      : ")); Serial.println(SecuritySettings.WifiSSID);
     Serial.print(F("  WifiKey       : ")); Serial.println(SecuritySettings.WifiKey);
